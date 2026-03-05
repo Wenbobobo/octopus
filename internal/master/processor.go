@@ -8,6 +8,7 @@ import (
 	"html"
 	"image"
 	"io"
+	"net/http"
 	"os"
 	"runtime/debug"
 	"strings"
@@ -48,17 +49,18 @@ func (ms *MasterService) handleSlaveLoop() {
 	}()
 
 	for event := range ms.in {
-		if event.Type == common.EventSync {
-			go ms.updateChats(event)
-		} else {
-			event := event
-			go func() {
-				ms.mutex.LockKey(event.Chat.ID)
-				defer ms.mutex.UnlockKey(event.Chat.ID)
+		event := event
+		ms.pool.Submit(func() {
+			if event.Type == common.EventSync {
+				ms.updateChats(event)
+				return
+			}
 
-				ms.processSlaveEvent(event)
-			}()
-		}
+			ms.mutex.LockKey(event.Chat.ID)
+			defer ms.mutex.UnlockKey(event.Chat.ID)
+
+			ms.processSlaveEvent(event)
+		})
 	}
 }
 
@@ -845,11 +847,15 @@ func (ms *MasterService) download(fileID string) (*common.BlobData, error) {
 		return nil, err
 	} else {
 		var data []byte
+		maxBytes := ms.config.Service.Media.MaxBytes
 
 		if ms.config.Master.LocalMode {
 			data, err = os.ReadFile(file.FilePath)
 			if err != nil {
 				return nil, err
+			}
+			if maxBytes > 0 && int64(len(data)) > maxBytes {
+				return nil, fmt.Errorf("local file exceeds max_bytes limit: %d > %d", len(data), maxBytes)
 			}
 		} else {
 			response, err := ms.client.Get(file.URL(ms.bot, ms.opts))
@@ -857,11 +863,28 @@ func (ms *MasterService) download(fileID string) (*common.BlobData, error) {
 				return nil, err
 			}
 			defer response.Body.Close()
-			data, err = io.ReadAll(response.Body)
-			if err != nil {
-				return nil, err
+			if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+				return nil, fmt.Errorf("download telegram file failed: %s", response.Status)
 			}
 
+			if maxBytes > 0 && response.ContentLength > maxBytes {
+				return nil, fmt.Errorf("remote file exceeds max_bytes limit by header: %d > %d", response.ContentLength, maxBytes)
+			}
+			if maxBytes > 0 {
+				limited := io.LimitReader(response.Body, maxBytes+1)
+				data, err = io.ReadAll(limited)
+				if err != nil {
+					return nil, err
+				}
+				if int64(len(data)) > maxBytes {
+					return nil, fmt.Errorf("remote file exceeds max_bytes limit: %d > %d", len(data), maxBytes)
+				}
+			} else {
+				data, err = io.ReadAll(response.Body)
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 
 		mime := mimetype.Detect(data)

@@ -25,8 +25,19 @@ func main() {
 	}
 	log.SetFormatter(&log.TextFormatter{TimestampFormat: "2006-01-02 15:04:05", FullTimestamp: true})
 
-	masterToSlave := common.NewMessageChan(1024)
-	slaveToMaster := common.NewMessageChan(1024)
+	common.SetHTTPDownloadOptions(
+		config.Service.Media.MaxBytes,
+		config.Service.Media.DownloadTimeout,
+	)
+
+	masterToSlave := common.NewMessageChanWithPolicy(
+		config.Service.Queue.MaxEvents,
+		config.Service.Queue.OverflowPolicy,
+	)
+	slaveToMaster := common.NewMessageChanWithPolicy(
+		config.Service.Queue.MaxEvents,
+		config.Service.Queue.OverflowPolicy,
+	)
 
 	master := master.NewMasterService(config, slaveToMaster.Out(), masterToSlave.In())
 	master.Start()

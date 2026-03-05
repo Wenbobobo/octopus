@@ -13,6 +13,8 @@ func init() {
 			topic_id INTEGER NOT NULL,
 			UNIQUE(master_limb, slave_limb)
 		);
+		CREATE INDEX IF NOT EXISTS idx_topic_master ON topic (master_limb, topic_id);
+		CREATE INDEX IF NOT EXISTS idx_topic_slave ON topic (slave_limb);
 		COMMIT;`); err != nil {
 		panic(err)
 	}
@@ -81,7 +83,7 @@ func AddTopic(t *Topic) error {
 
 func DelTopic(master_limb, slave_limb string) error {
 	_, err := db.DB.Exec(
-		`DELETE FROM link WHERE master_limb = ? AND slave_limb = ?;`,
+		`DELETE FROM topic WHERE master_limb = ? AND slave_limb = ?;`,
 		master_limb, slave_limb,
 	)
 	return err

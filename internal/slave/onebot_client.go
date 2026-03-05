@@ -48,6 +48,7 @@ type OnebotClient struct {
 	websocketRequestID    int64
 
 	mutex common.KeyMutex
+	pool  *common.WorkerPool
 }
 
 func NewOnebotClient(vendor *common.Vendor, agent string, config *common.Configure, conn *websocket.Conn, out chan<- *common.OctopusEvent) *OnebotClient {
@@ -75,6 +76,10 @@ func NewOnebotClient(vendor *common.Vendor, agent string, config *common.Configu
 		s2m:               s2m,
 		websocketRequests: make(map[string]chan<- *onebot.Response),
 		mutex:             common.NewHashed(47),
+		pool: common.NewWorkerPool(
+			config.Service.Worker.MaxConcurrency,
+			config.Service.Worker.QueueSize,
+		),
 	}
 }
 
@@ -86,6 +91,7 @@ func (oc *OnebotClient) Vendor() string {
 func (oc *OnebotClient) run(stopFunc func()) {
 	defer func() {
 		log.Infof("OnebotClient(%s) disconnected from websocket", oc.vendor)
+		oc.pool.Stop()
 		_ = oc.conn.Close()
 		stopFunc()
 	}()
@@ -106,9 +112,12 @@ func (oc *OnebotClient) run(stopFunc func()) {
 		case onebot.PaylaodRequest:
 			log.Warnf("Request %s not support", payload.(*onebot.Request).Action)
 		case onebot.PayloadResponse:
-			go oc.processResponse(payload.(*onebot.Response))
+			oc.processResponse(payload.(*onebot.Response))
 		case onebot.PayloadEvent:
-			go oc.processEvent(payload.(onebot.IEvent))
+			event := payload.(onebot.IEvent)
+			oc.pool.Submit(func() {
+				oc.processEvent(event)
+			})
 		}
 	}
 }
@@ -508,8 +517,7 @@ func (oc *OnebotClient) processMessage(event *common.OctopusEvent, segments []on
 
 func (oc *OnebotClient) processMetaLifycycle(m *onebot.LifeCycle) {
 	if m.SubType == "connect" {
-		time.Sleep(time.Minute)
-		oc.updateChats()
+		time.AfterFunc(time.Minute, oc.updateChats)
 	}
 }
 
@@ -694,6 +702,9 @@ func (oc *OnebotClient) getMedia(t onebot.RequestType, file string) (*common.Blo
 			if f.Base64 != "" {
 				var data []byte
 				if data, err = base64.StdEncoding.DecodeString(f.Base64); err == nil {
+					if limit := oc.config.Service.Media.MaxBytes; limit > 0 && int64(len(data)) > limit {
+						return nil, fmt.Errorf("media exceeds max_bytes limit: %d > %d", len(data), limit)
+					}
 					return &common.BlobData{
 						Name:   f.FileName,
 						Mime:   mimetype.Detect(data).String(),

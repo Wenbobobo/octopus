@@ -29,21 +29,14 @@ type Chat struct {
 }
 
 func AddOrUpdateChat(c *Chat) error {
-	rows, err := db.DB.Query(`SELECT * FROM chat WHERE limb = ?;`, c.Limb)
+	_, err := db.DB.Exec(`INSERT INTO chat (limb, chat_type, title) VALUES (?, ?, ?)
+		ON CONFLICT(limb) DO UPDATE SET
+		chat_type = excluded.chat_type,
+		title = excluded.title;`,
+		c.Limb, c.ChatType, c.Title,
+	)
 	if err != nil {
 		return err
-	}
-
-	hasNext := rows.Next()
-	rows.Close()
-	if hasNext {
-		if _, err := db.DB.Exec(`UPDATE chat SET title = ? WHERE limb = ?;`, c.Title, c.Limb); err != nil {
-			return err
-		}
-	} else {
-		if _, err := db.DB.Exec(`INSERT INTO chat (limb, chat_type, title) VALUES (?, ?, ?);`, c.Limb, c.ChatType, c.Title); err != nil {
-			return err
-		}
 	}
 
 	return nil

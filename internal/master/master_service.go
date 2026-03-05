@@ -36,10 +36,13 @@ type MasterService struct {
 	archiveChats map[string]int64
 
 	mutex common.KeyMutex
+	pool  *common.WorkerPool
 }
 
 func (ms *MasterService) Start() {
-	ms.client = http.Client{}
+	ms.client = http.Client{
+		Timeout: ms.config.Service.Media.DownloadTimeout,
+	}
 	ms.opts = &gotgbot.RequestOpts{
 		Timeout: requestTimeout,
 		APIURL:  ms.config.Master.APIURL,
@@ -99,6 +102,7 @@ func (ms *MasterService) Start() {
 func (ms *MasterService) Stop() {
 	log.Infoln("MasterService stopping")
 	ms.updater.Stop()
+	ms.pool.Stop()
 }
 
 func NewMasterService(config *common.Configure, in <-chan *common.OctopusEvent, out chan<- *common.OctopusEvent) *MasterService {
@@ -117,6 +121,10 @@ func NewMasterService(config *common.Configure, in <-chan *common.OctopusEvent, 
 		out:          out,
 		archiveChats: archiveChats,
 		mutex:        common.NewHashed(47),
+		pool: common.NewWorkerPool(
+			config.Service.Worker.MaxConcurrency,
+			config.Service.Worker.QueueSize,
+		),
 	}
 }
 

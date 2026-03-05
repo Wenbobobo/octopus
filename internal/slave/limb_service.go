@@ -52,6 +52,7 @@ type LimbService struct {
 	clientsLock sync.Mutex
 
 	mutex common.KeyMutex
+	pool  *common.WorkerPool
 }
 
 // handle client connnection
@@ -165,6 +166,7 @@ func (ls *LimbService) Stop() {
 		client.Dispose()
 	}
 	ls.clientsLock.Unlock()
+	ls.pool.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -181,6 +183,10 @@ func NewLimbService(config *common.Configure, in <-chan *common.OctopusEvent, ou
 		out:     out,
 		clients: make(map[string]Client),
 		mutex:   common.NewHashed(47),
+		pool: common.NewWorkerPool(
+			config.Service.Worker.MaxConcurrency,
+			config.Service.Worker.QueueSize,
+		),
 	}
 	service.server = &http.Server{
 		Addr:    service.config.Service.Addr,
@@ -207,14 +213,16 @@ func (ls *LimbService) handleMasterLoop() {
 
 		if ok {
 			event := event
-			go func() {
+			ls.pool.Submit(func() {
 				ls.mutex.LockKey(event.Chat.ID)
 				defer ls.mutex.UnlockKey(event.Chat.ID)
 
 				ls.handleEvent(client, event)
-			}()
+			})
 		} else {
-			go event.Callback(nil, fmt.Errorf("LimbClient(%s) not found", vendor))
+			if event.Callback != nil {
+				event.Callback(nil, fmt.Errorf("LimbClient(%s) not found", vendor))
+			}
 		}
 	}
 }
@@ -222,19 +230,21 @@ func (ls *LimbService) handleMasterLoop() {
 func (ls *LimbService) handleEvent(client Client, event *common.OctopusEvent) {
 	if resp, err := client.SendEvent(event); err != nil {
 		sendErr := fmt.Errorf("failed to send event to %s: %v", client.Vendor(), err)
-		event.Callback(nil, sendErr)
+		if event.Callback != nil {
+			event.Callback(nil, sendErr)
+		}
 	} else {
 		event.ID = resp.ID
 		event.Timestamp = resp.Timestamp
-		event.Callback(event, nil)
+		if event.Callback != nil {
+			event.Callback(event, nil)
+		}
 	}
 }
 
 func (ls *LimbService) observe(msg string) {
-	go func() {
-		ls.out <- &common.OctopusEvent{
-			Type:    common.EventObserve,
-			Content: msg,
-		}
-	}()
+	ls.out <- &common.OctopusEvent{
+		Type:    common.EventObserve,
+		Content: msg,
+	}
 }

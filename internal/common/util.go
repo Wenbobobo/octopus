@@ -3,12 +3,15 @@ package common
 import (
 	"compress/gzip"
 	"crypto/tls"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gabriel-vasile/mimetype"
 
@@ -52,6 +55,8 @@ var (
 			},
 		},
 	}
+
+	maxDownloadBytes int64
 
 	UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/87.0.4280.88 Safari/537.36 Edg/87.0.664.66"
 )
@@ -119,7 +124,20 @@ func GetBytes(url string) ([]byte, error) {
 		_ = reader.Close()
 	}()
 
-	return io.ReadAll(reader)
+	if maxDownloadBytes <= 0 {
+		return io.ReadAll(reader)
+	}
+
+	limited := io.LimitReader(reader, maxDownloadBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxDownloadBytes {
+		return nil, fmt.Errorf("download exceeds max_bytes limit: %d > %d", len(data), maxDownloadBytes)
+	}
+
+	return data, nil
 }
 
 type gzipCloser struct {
@@ -159,9 +177,24 @@ func HTTPGetReadCloser(url string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		_ = resp.Body.Close()
+		return nil, errors.New(resp.Status)
+	}
+	if maxDownloadBytes > 0 && resp.ContentLength > maxDownloadBytes {
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("download exceeds max_bytes limit by header: %d > %d", resp.ContentLength, maxDownloadBytes)
+	}
 	if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
 		return NewGzipReadCloser(resp.Body)
 	}
 
 	return resp.Body, err
+}
+
+func SetHTTPDownloadOptions(maxBytes int64, timeout time.Duration) {
+	maxDownloadBytes = maxBytes
+	if timeout > 0 {
+		httpClient.Timeout = timeout
+	}
 }

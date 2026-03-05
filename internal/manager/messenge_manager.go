@@ -24,6 +24,7 @@ func init() {
 		);
 		CREATE INDEX IF NOT EXISTS idx_slave_reply ON message (slave_limb, timestamp);
 		CREATE INDEX IF NOT EXISTS idx_master_reply ON message (master_limb, master_msg_id);
+		CREATE INDEX IF NOT EXISTS idx_message_timestamp ON message (timestamp);
 		COMMIT;`); err != nil {
 		panic(err)
 	}
@@ -140,4 +141,46 @@ func GetMessagesBySlaveReply(slaveLimb string, reply *common.ReplyInfo) ([]*Mess
 	}
 
 	return messages, nil
+}
+
+func DeleteMessagesOlderThan(ts int64) (int64, error) {
+	result, err := db.DB.Exec(`DELETE FROM message WHERE timestamp < ?;`, ts)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rows, nil
+}
+
+func DeleteOldestMessages(limit int) (int64, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+
+	result, err := db.DB.Exec(`DELETE FROM message
+		WHERE id IN (
+			SELECT id FROM message
+			ORDER BY timestamp ASC, id ASC
+			LIMIT ?
+		);`, limit)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return rows, nil
+}
+
+func CountMessages() (int64, error) {
+	row := db.DB.QueryRow(`SELECT COUNT(*) FROM message;`)
+	var count int64
+	if err := row.Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
 }

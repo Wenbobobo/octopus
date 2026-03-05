@@ -12,6 +12,8 @@ func init() {
 			slave_limb TEXT NOT NULL,
 			UNIQUE(master_limb, slave_limb)
 		);
+		CREATE INDEX IF NOT EXISTS idx_link_master ON link (master_limb);
+		CREATE INDEX IF NOT EXISTS idx_link_slave ON link (slave_limb);
 		COMMIT;`); err != nil {
 		panic(err)
 	}

@@ -32,6 +32,7 @@ type LimbClient struct {
 	websocketRequestID    int64
 
 	mutex common.KeyMutex
+	pool  *common.WorkerPool
 }
 
 func NewLimbClient(vendor string, config *common.Configure, conn *websocket.Conn, out chan<- *common.OctopusEvent) *LimbClient {
@@ -56,6 +57,10 @@ func NewLimbClient(vendor string, config *common.Configure, conn *websocket.Conn
 		s2m:               s2m,
 		websocketRequests: make(map[int64]chan<- *common.OctopusResponse),
 		mutex:             common.NewHashed(47),
+		pool: common.NewWorkerPool(
+			config.Service.Worker.MaxConcurrency,
+			config.Service.Worker.QueueSize,
+		),
 	}
 }
 
@@ -67,6 +72,7 @@ func (lc *LimbClient) Vendor() string {
 func (lc *LimbClient) run(stopFunc func()) {
 	defer func() {
 		log.Infof("LimbClient(%s) disconnected from websocket", lc.vendor)
+		lc.pool.Stop()
 		_ = lc.conn.Close()
 		stopFunc()
 	}()
@@ -85,7 +91,7 @@ func (lc *LimbClient) run(stopFunc func()) {
 			if request.Type == common.ReqPing {
 				log.Debugln("Receive ping request")
 			} else if request.Type == common.ReqEvent {
-				go func() {
+				lc.pool.Submit(func() {
 					event := request.Data.(*common.OctopusEvent)
 
 					lc.mutex.LockKey(event.Chat.ID)
@@ -94,7 +100,7 @@ func (lc *LimbClient) run(stopFunc func()) {
 					event = lc.s2m.Apply(event)
 
 					lc.out <- event
-				}()
+				})
 			} else {
 				log.Warnf("Request %s not support", request.Type)
 			}

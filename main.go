@@ -9,6 +9,7 @@ import (
 	"github.com/duo/octopus/internal/common"
 	"github.com/duo/octopus/internal/master"
 	"github.com/duo/octopus/internal/slave"
+	"github.com/duo/octopus/internal/storage"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -44,12 +45,16 @@ func main() {
 	slave := slave.NewLimbService(config, masterToSlave.Out(), slaveToMaster.In())
 	slave.Start()
 
+	cleaner := storage.NewCleaner(config)
+	cleaner.Start()
+
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	<-c
 
 	fmt.Printf("\n")
 
+	cleaner.Stop()
 	slave.Stop()
 	master.Stop()
 }

@@ -46,9 +46,41 @@ service:
   addr: 0.0.0.0:11111 # Required, listen address
   secret: hello # Required, user defined secret
   send_timeout: 3m # Optional
+  queue:
+    max_events: 4096 # Optional, bridge queue capacity
+    overflow_policy: block # Optional, block | drop_oldest
+  worker:
+    max_concurrency: 8 # Optional
+    queue_size: 4096 # Optional
+  media:
+    max_bytes: 0 # Optional, max download bytes, 0 means unlimited
+    download_timeout: 90s # Optional
+  storage:
+    data_dir: . # Optional, total size monitor root
+    max_total_bytes: 0 # Optional, 0 means disabled
+    target_total_bytes: 0 # Optional, default 70% of max_total_bytes
+    cleanup_interval: 1h # Optional
+    message_ttl_days: 0 # Optional, remove expired message mappings
+    batch_delete: 500 # Optional
 
 log:
   level: info
+
+wechat_login:
+  enable: false
+  trigger: startup_check
+  timezone: Asia/Shanghai
+  relogin_at: "03:00"
+  hooks:
+    check_logged_in: "" # exit code 0 means logged-in
+    resume_login: "" # try click-login flow
+    require_scan: "" # fallback flow when scan is required
+    timeout: 30s
+    retry: 2
+    retry_delay: 10s
+  qrcode:
+    forward_to_tg: false # reserved for phase-3
+    capture_cmd: "" # output QR image path
 ```
 
 ## Command
@@ -58,3 +90,17 @@ All messages will be sent to the admin directly by default, you can archive chat
 /link Manage remote chat link.
 /chat Generate a remote chat head.
 ```
+
+## Stability Notes
+- Event bridge queue is now bounded and supports overflow policy.
+- Event handling uses worker pools to avoid goroutine spikes under burst traffic.
+- Optional media download limits protect memory and bandwidth usage.
+- Optional storage cleaner can keep DB/container footprint bounded.
+- WeChat auto-login orchestrator supports startup check and daily relogin scheduling via shell hooks.
+
+## Extra Docs
+- `docs/upstream-docker-wechat-notes.md`: upstream Docker/GitHub implementation notes (octopus + octopus-wechat).
+- `docs/docker-wechat-stack.md`: ready-to-run Docker compose deployment and operations guide.
+- `docs/wechat-autologin.md`: auto-login workflow, hook contract, and config examples.
+- `docs/wechat-optimization-plan.md`: cost/benefit analysis and staged optimization roadmap.
+- `scripts/wechat_login/*.sh`: helper scripts for hook-based WeChat login integration.

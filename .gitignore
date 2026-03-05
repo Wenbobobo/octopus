@@ -6,3 +6,4 @@ vendor/
 
 configure.yaml
 master.db
+.env.wechat

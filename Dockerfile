@@ -12,7 +12,7 @@ RUN set -ex \
 
 FROM alpine:latest
 
-RUN apk add --no-cache --update --quiet --no-progress ffmpeg tzdata \
+RUN apk add --no-cache --update --quiet --no-progress ffmpeg tzdata curl \
     && cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
     && echo "Asia/Shanghai" > /etc/timezone
 #&& apk del --quiet --no-progress tzdata

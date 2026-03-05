@@ -1,0 +1,38 @@
+name: octopus-wechat
+
+services:
+  octopus-wechat:
+    image: lxduo/octopus-wechat:latest
+    container_name: octopus-wechat
+    restart: unless-stopped
+    privileged: true
+    network_mode: host
+    shm_size: 512m
+    environment:
+      VNCPASS: ${VNCPASS:-ChangeThisVncPassword}
+    volumes:
+      - ./deploy/wechat/runtime:/home/user/octopus-wechat
+      - ./deploy/wechat/runtime/configure.yaml:/home/user/configure.yaml:ro
+      - "./deploy/wechat/wechat_files:/home/user/.wine/drive_c/users/user/My Documents/WeChat Files"
+      - "./deploy/wechat/application_data:/home/user/.wine/drive_c/users/user/Application Data"
+
+  octopus:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: local/octopus:wechat
+    container_name: octopus
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - octopus-wechat
+    environment:
+      HOOK_HOST: ${HOOK_HOST:-127.0.0.1}
+      HOOK_PORT: ${HOOK_PORT:-22223}
+      TIMEOUT: ${HOOK_TIMEOUT:-5}
+      RESUME_LOGIN_CMD: ${RESUME_LOGIN_CMD:-}
+      REQUIRE_SCAN_CMD: ${REQUIRE_SCAN_CMD:-}
+    volumes:
+      - ./deploy/octopus/data:/data
+      - ./deploy/octopus/configure.yaml:/data/configure.yaml:ro
+      - ./scripts/wechat_login:/data/scripts/wechat_login:ro

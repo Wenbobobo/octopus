@@ -19,6 +19,38 @@ service:
   addr: 0.0.0.0:11111 # Required, listen address
   secret: hello # Required,
   send_timeout: 3m # Optional
+  queue:
+    max_events: 4096 # Optional, bridge queue capacity
+    overflow_policy: block # Optional, block | drop_oldest
+  worker:
+    max_concurrency: 8 # Optional, max worker count for event handling
+    queue_size: 4096 # Optional, worker queue size
+  media:
+    max_bytes: 0 # Optional, 0 means unlimited
+    download_timeout: 90s # Optional
+  storage:
+    data_dir: . # Optional, dir size used for cleanup
+    max_total_bytes: 0 # Optional, 0 means disabled
+    target_total_bytes: 0 # Optional, default 70% of max_total_bytes
+    cleanup_interval: 1h # Optional
+    message_ttl_days: 0 # Optional, 0 means disabled
+    batch_delete: 500 # Optional
 
 log:
   level: info
+
+wechat_login:
+  enable: false
+  trigger: startup_check # Optional: startup_check
+  timezone: Asia/Shanghai
+  relogin_at: "03:00"
+  hooks:
+    check_logged_in: "" # Optional shell command, exit 0 if logged in
+    resume_login: "" # Optional shell command, try auto click / resume login
+    require_scan: "" # Optional shell command, run when scan is needed
+    timeout: 30s
+    retry: 2
+    retry_delay: 10s
+  qrcode:
+    forward_to_tg: false # Reserved for phase-3
+    capture_cmd: "" # Optional shell command, output QR image path

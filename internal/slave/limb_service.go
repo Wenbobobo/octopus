@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/duo/octopus/internal/common"
+	"github.com/duo/octopus/internal/wechatlogin"
 
 	"github.com/gorilla/websocket"
 
@@ -53,6 +54,7 @@ type LimbService struct {
 
 	mutex common.KeyMutex
 	pool  *common.WorkerPool
+	login *wechatlogin.Manager
 }
 
 // handle client connnection
@@ -157,6 +159,7 @@ func (ls *LimbService) Start() {
 	}()
 
 	go ls.handleMasterLoop()
+	ls.login.Start()
 }
 
 func (ls *LimbService) Stop() {
@@ -166,6 +169,7 @@ func (ls *LimbService) Stop() {
 		client.Dispose()
 	}
 	ls.clientsLock.Unlock()
+	ls.login.Stop()
 	ls.pool.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -192,6 +196,13 @@ func NewLimbService(config *common.Configure, in <-chan *common.OctopusEvent, ou
 		Addr:    service.config.Service.Addr,
 		Handler: service,
 	}
+	service.login = wechatlogin.NewManager(
+		config,
+		service.hasWechatConnected,
+		func(msg string) {
+			service.observe("WeChatLogin: " + msg)
+		},
+	)
 
 	return service
 }
@@ -247,4 +258,17 @@ func (ls *LimbService) observe(msg string) {
 		Type:    common.EventObserve,
 		Content: msg,
 	}
+}
+
+func (ls *LimbService) hasWechatConnected() bool {
+	ls.clientsLock.Lock()
+	defer ls.clientsLock.Unlock()
+
+	for vendor := range ls.clients {
+		if strings.HasPrefix(vendor, "wechat") {
+			return true
+		}
+	}
+
+	return false
 }

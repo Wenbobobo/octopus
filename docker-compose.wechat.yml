@@ -10,11 +10,17 @@ services:
     shm_size: 512m
     environment:
       VNCPASS: ${VNCPASS:-ChangeThisVncPassword}
+      HOOK_HOST: ${HOOK_HOST:-127.0.0.1}
+      WECHAT_VERSION: ${WECHAT_VERSION:-3.9.12.16}
+      WECHAT_API_PORTS_CSV: ${WECHAT_API_PORTS_CSV:-22223,18888}
+      WECHAT_AGENT_RESTART_DELAY: ${WECHAT_AGENT_RESTART_DELAY:-3}
     volumes:
       - ./deploy/wechat/runtime:/home/user/octopus-wechat
       - ./deploy/wechat/runtime/configure.yaml:/home/user/configure.yaml:ro
       - "./deploy/wechat/wechat_files:/home/user/.wine/drive_c/users/user/My Documents/WeChat Files"
       - "./deploy/wechat/application_data:/home/user/.wine/drive_c/users/user/Application Data"
+      - ./scripts/deploy/wechat_supervisor.sh:/usr/local/bin/wechat_supervisor.sh:ro
+    command: ["/bin/sh", "/usr/local/bin/wechat_supervisor.sh"]
 
   octopus:
     build:
@@ -30,6 +36,8 @@ services:
       HOOK_HOST: ${HOOK_HOST:-127.0.0.1}
       HOOK_PORT: ${HOOK_PORT:-22223}
       TIMEOUT: ${HOOK_TIMEOUT:-5}
+      WECHAT_VERSION: ${WECHAT_VERSION:-3.9.12.16}
+      WECHAT_API_PORTS_CSV: ${WECHAT_API_PORTS_CSV:-22223,18888}
       RESUME_LOGIN_CMD: ${RESUME_LOGIN_CMD:-}
       REQUIRE_SCAN_CMD: ${REQUIRE_SCAN_CMD:-}
     volumes:

@@ -26,6 +26,9 @@ This setup keeps data persistent and bounded, and keeps WeChat login automation 
 ```bash
 cp .env.wechat.example .env.wechat
 ```
+4. Recommended defaults in `.env.wechat`:
+- `WECHAT_VERSION=3.9.12.16`
+- `WECHAT_API_PORTS_CSV=22223,18888`
 
 ## Pull and Build
 ```bash
@@ -72,6 +75,10 @@ docker compose -f docker-compose.wechat.yml exec octopus \
 
 ## Notes
 - Compose uses `network_mode: host`, aligned with common ComWechat lineage runtime behavior.
+- `octopus-wechat` now runs through `scripts/deploy/wechat_supervisor.sh`:
+  - cleans stale X locks before each agent cycle
+  - restarts VNC and agent in-process (container stays alive)
+  - auto-calls `type=35` version patch with `WECHAT_VERSION`
 - `scripts/deploy/prepare_wechat_runtime.sh` preloads `octopus-wechat-x86.exe` and required DLL files into `deploy/wechat/runtime/`.
 - `deploy/octopus/configure.yaml` already enables:
   - bounded queue/worker
@@ -83,3 +90,4 @@ docker compose -f docker-compose.wechat.yml exec octopus \
   - `REQUIRE_SCAN_CMD`
   These will be finalized after your login screenshots are provided.
 - If `octopus-wechat` logs `Failed to switch to QR login` during first-time bring-up, collect VNC screenshots and log tail for state-specific tuning.
+- If WeChat UI shows network anomaly but logs show repeated agent exits, first check whether `type=35` patch is actually applied in logs (`version set via port ...` from supervisor).

@@ -3,7 +3,8 @@
 .DS_Store
 
 vendor/
-
 configure.yaml
 master.db
 .env.wechat
+log/
+deploy/wechat/runtime/configure.yaml

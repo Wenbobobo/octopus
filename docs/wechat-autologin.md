@@ -25,9 +25,12 @@ All hooks are shell commands.
 ## Suggested Hook Scripts
 Use the helper scripts added in this repo:
 - `scripts/wechat_login/check_logged_in.sh`
+- `scripts/wechat_login/set_version.sh`
 - `scripts/wechat_login/resume_login.sh`
 - `scripts/wechat_login/require_scan.sh`
 - `scripts/wechat_login/capture_qrcode.sh`
+
+`set_version.sh` applies ComWeChat `type=35` patch automatically (default target version `3.9.12.16`).
 
 Example config:
 ```yaml
